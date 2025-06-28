@@ -19,4 +19,8 @@ app.use(express.static("public"));  // store on server in a folder named "public
 
 app.use(cookieParser());
 
+
+import userRouter from "./routes/user_route.js";
+
+app.use("/api/v1/users", userRouter)
 export { app };
