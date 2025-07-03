@@ -1,8 +1,8 @@
 import mongoose, { isValidObjectId } from "mongoose";
 import { Video } from "../models/video_model.js";
 import { User } from "../models/user_model.js";
-import { apiError, ApiError } from "../utils/ApiError.js";
-import { apiResponse, ApiResponse } from "../utils/ApiResponse.js";
+import { apiError, ApiError } from "../utils/apiError.js";
+import { apiResponse, ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   uploadOnCloudinary,
@@ -12,6 +12,44 @@ import {
 const getAllVideos = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
   //TODO: get all videos based on query, sort, pagination
+  const pageStart = parseInt(page) - 1;
+  const limitSize = parseInt(limit);
+  const skip = pageStart * limitSize;
+
+  const user = await User.findById(userId);
+  if (!user) throw new apiError(402, "Invalid User !");
+
+  const sortField = sortBy || "createdAt";
+  const sortOrder = sortType === "desc" ? -1 : 1;
+
+  const videos = await Video.aggregate([
+    {
+      $match: {
+        owner: mongoose.Types.ObjectId(userId),
+        isPublished: true,
+        $or: [
+          { title: { $regex: query, $options: "i" } },
+          { description: { $regex: query, $options: "i" } },
+        ],
+      },
+    },
+    {
+      $sort: {
+        [sortField]: sortOrder,
+      },
+    },
+    {
+      $skip: skip,
+    },
+    {
+      $limit: limitSize,
+    },
+  ]);
+
+  if (!videos) throw new apiError(500, "Error filtering videos !!");
+  return res
+    .status(200)
+    .json(new apiResponse(200, videos, "Videos fetched successfully !!"));
 });
 
 const publishAVideo = asyncHandler(async (req, res) => {
@@ -132,13 +170,7 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(
-      new apiResponse(
-        200,
-        video,
-        "Changed published status !!"
-      )
-    );
+    .json(new apiResponse(200, video, "Changed published status !!"));
 });
 
 export {
