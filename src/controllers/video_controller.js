@@ -1,8 +1,8 @@
 import mongoose, { isValidObjectId } from "mongoose";
 import { Video } from "../models/video_model.js";
 import { User } from "../models/user_model.js";
-import { apiError, ApiError } from "../utils/apiError.js";
-import { apiResponse, ApiResponse } from "../utils/apiResponse.js";
+import { apiError } from "../utils/apiError.js";
+import { apiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   uploadOnCloudinary,
@@ -58,8 +58,8 @@ const publishAVideo = asyncHandler(async (req, res) => {
   if (!title || !description)
     throw new apiError(404, "Missing title or description");
 
-  const videoPath = req?.files?.videoFile?.[0];
-  const thumbnailPath = req?.files?.thumbnail?.[0];
+  const videoPath = req?.files?.videoFile?.[0]?.path;
+  const thumbnailPath = req?.files?.thumbnail?.[0]?.path;
 
   if (!videoPath || !thumbnailPath)
     throw new apiError(500, "Video or Thumbanil missing");
@@ -114,21 +114,28 @@ const updateVideo = asyncHandler(async (req, res) => {
   if (!videoId) throw new apiError(404, "Missing videoId");
 
   const { title, description } = req.body;
-  const thumbnailPath = req?.files?.thumbnail?.[0];
+  const thumbnailPath = req?.files?.thumbnail?.[0]?.path;
   if (!title || !description || !thumbnailPath)
     throw new apiError(400, "Missing fields !");
 
   const thumbnailUrl = await uploadOnCloudinary(thumbnailPath);
 
-  await deleteFromCloudinary(video.videoFile);
+  const oldVideo = await Video.findById(videoId);
+  await deleteFromCloudinary(oldVideo.thumbnail);
 
-  const video = await Video.findByIdAndUpdate(videoId, {
-    $set: {
-      thumbnail: thumbnailUrl.url,
-      title: title,
-      description: description,
+  const video = await Video.findByIdAndUpdate(
+    videoId,
+    {
+      $set: {
+        thumbnail: thumbnailUrl.url,
+        title: title,
+        description: description,
+      },
     },
-  });
+    {
+      new: true,
+    }
+  );
 
   if (!video) throw new apiError(402, "Invalid videoId or Failed update");
 
@@ -148,8 +155,8 @@ const deleteVideo = asyncHandler(async (req, res) => {
   const thumbnailUrl = video.thumbnail;
   const videoUrl = video.videoFile;
 
-  await deleteFromCloudinary(thumbnailUrl);
   await deleteFromCloudinary(videoUrl);
+  await deleteFromCloudinary(thumbnailUrl);
 
   await Video.findByIdAndDelete(videoId);
 
